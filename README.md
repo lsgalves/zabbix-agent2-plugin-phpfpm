@@ -3,7 +3,7 @@ This plugin provides a native solution for monitoring multiples PHP-FPM pools wi
 
 ## Requirements
 - Zabbix Agent 2
-- Go >= 1.12 (required only to build from source)
+- Go >= 1.21 (required only to build from source)
 
 ## Installation
 *Plugins.PHPFPM.System.Path* variable needs to be set in Zabbix agent 2 configuration file with the path to the
@@ -34,7 +34,7 @@ ping.path = /ping
 And that the Zabbix user has access to the php-fpm socket, for this you can add the zabbix user to `listen.acl_users`.
 Finally, reload php-fpm config: `systemctl reload php-fpm`.
 
-### Options
+## Options
 PHP-FPM plugin can be executed on its own with these parameters:
 * *-h*, *--help* displays help message
 * *-V*, *--version* displays the plugin version and license information
