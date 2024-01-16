@@ -3,7 +3,7 @@ This plugin provides a native solution for monitoring multiples PHP-FPM pools wi
 
 ## Requirements
 - Zabbix Agent 2
-- Go >= 1.21 (required only to build from source)
+- Go >= 1.20 (required only to build from source)
 
 ## Installation
 *Plugins.PHPFPM.System.Path* variable needs to be set in Zabbix agent 2 configuration file with the path to the
