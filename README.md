@@ -5,6 +5,9 @@ This plugin provides a native solution for monitoring multiples PHP-FPM pools wi
 - Zabbix Agent 2
 - Go >= 1.20 (required only to build from source)
 
+### Template
+Import the [PHP-FPM to Multi Pool template](./template_php-fpm_to_multi_pool.yml).
+
 ## Installation
 *Plugins.PHPFPM.System.Path* variable needs to be set in Zabbix agent 2 configuration file with the path to the
 PHP-FPM plugin executable. By default the variable is set in **plugin** configuration file *phpfpm.conf* and then

@@ -1,0 +1,494 @@
+zabbix_export:
+  version: '6.4'
+  template_groups:
+    - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
+      name: Templates/Applications
+  templates:
+    - uuid: 9084ed3753364233808894abe0db6243
+      template: 'PHP-FPM to Multi Pool'
+      name: 'PHP-FPM to Multi Pool'
+      description: 'Get PHP-FPM metrics using Zabbix agent running on Linux.'
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: 21e02fe5af7b412c9e983b7d1ee8d01e
+          name: 'PHP-FPM: Queue usage'
+          type: CALCULATED
+          key: php-fpm.listen_queue_usage
+          history: 7d
+          value_type: FLOAT
+          units: '%'
+          params: 'last(//php-fpm.listen_queue)/(last(//php-fpm.listen_queue_len)+(last(//php-fpm.listen_queue_len)=0))*100'
+          description: 'Queue utilization'
+          tags:
+            - tag: component
+              value: application
+          triggers:
+            - uuid: 1b3c3ea72e9b46559ee27eb6276562b4
+              expression: 'min(/PHP-FPM to Multi Pool/php-fpm.listen_queue_usage,15m) > {$PHP_FPM.QUEUE.WARN.MAX}'
+              name: 'PHP-FPM: Queue utilization is high'
+              event_name: 'PHP-FPM: Queue utilization is high (over {$PHP_FPM.QUEUE.WARN.MAX}% for 15m)'
+              priority: WARNING
+              description: 'The queue for this pool reached {$PHP_FPM.QUEUE.WARN.MAX}% of its maximum capacity. Items in queue represent the current number of connections that have been initiated on this pool, but not yet accepted.'
+              tags:
+                - tag: scope
+                  value: capacity
+        - uuid: 2b93f20422d7488991218bbac51e6fff
+          name: 'PHP-FPM: CPU utilization'
+          key: 'proc.cpu.util["{$PHP_FPM.PROCESS_NAME}"]'
+          history: 7d
+          value_type: FLOAT
+          units: '%'
+          description: 'Process CPU utilization percentage.'
+          tags:
+            - tag: component
+              value: cpu
+        - uuid: 69ba273cf91048b890829268aac815ab
+          name: 'PHP-FPM: Memory usage, %'
+          key: 'proc.mem["{$PHP_FPM.PROCESS_NAME}",,,,pmem]'
+          history: 7d
+          value_type: FLOAT
+          units: '%'
+          description: 'Memory used percentage relative to total memory available.'
+          tags:
+            - tag: component
+              value: memory
+        - uuid: 5f8fc5d941c04905a61de65b2280e571
+          name: 'PHP-FPM: Memory usage (rss)'
+          key: 'proc.mem["{$PHP_FPM.PROCESS_NAME}",,,,rss]'
+          history: 7d
+          units: B
+          description: 'Resident set size memory used by process in bytes.'
+          tags:
+            - tag: component
+              value: memory
+        - uuid: 618da893de704e4a8e9838ca96595400
+          name: 'PHP-FPM: Number of processes running'
+          key: 'proc.num["{$PHP_FPM.PROCESS_NAME}"]'
+          history: 7d
+          tags:
+            - tag: component
+              value: system
+            - tag: pool
+              value: '{#NAME}'
+          triggers:
+            - uuid: 0a90cc57f0464798b6eac992292a14f2
+              expression: 'last(/PHP-FPM to Multi Pool/proc.num["{$PHP_FPM.PROCESS_NAME}"])=0'
+              name: 'PHP-FPM: Process is not running'
+              priority: HIGH
+              tags:
+                - tag: scope
+                  value: availability
+      discovery_rules:
+        - uuid: b2672168a7444c3489383392e178ff42
+          name: 'PHP-FPM pools discovery'
+          key: phpfpm.pool.discovery
+          delay: 15m
+          filter:
+            conditions:
+              - macro: '{#NAME}'
+                value: '{$PHP_FPM.LLD.FILTER.POOL.MATCHES}'
+                formulaid: A
+          item_prototypes:
+            - uuid: 1fd38ddf50c641698b56c3901143098c
+              name: 'PHP-FPM Pool  {#NAME}: Accepted connections per second'
+              type: DEPENDENT
+              key: 'phpfpm.pool.conn_accepted.rate["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              value_type: FLOAT
+              units: s
+              description: 'The number of accepted requests per second.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''accepted conn'']'
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: connections
+                - tag: pool
+                  value: '{#NAME}'
+            - uuid: e1b7ec78e9224adf8a99edf779a2817c
+              name: 'PHP-FPM Pool {#NAME}: Listen queue'
+              type: DEPENDENT
+              key: 'phpfpm.pool.listen_queue["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              units: s
+              description: 'The current number of connections that have been initiated, but not yet accepted.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''listen queue'']'
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: listen-queue
+                - tag: pool
+                  value: '{#NAME}'
+            - uuid: 6a0b5d6206cb434487fd9375e8fd3a50
+              name: 'PHP-FPM Pool {#NAME}: Listen queue, len'
+              type: DEPENDENT
+              key: 'phpfpm.pool.listen_queue_len["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              description: 'Size of the socket queue of pending connections.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''listen queue len'']'
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: listen-queue
+                - tag: pool
+                  value: '{#NAME}'
+            - uuid: 06e7f395e7fc456d85d7aec59a08008a
+              name: 'PHP-FPM Pool {#NAME}: Listen queue, max'
+              type: DEPENDENT
+              key: 'phpfpm.pool.listen_queue_max["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              description: 'The maximum number of requests in the queue of pending connections since this FPM pool has started.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''max listen queue'']'
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: listen-queue
+                - tag: pool
+                  value: '{#NAME}'
+            - uuid: f897e0f49e1a41068c7b1c21526b7c0e
+              name: 'PHP-FPM Pool {#NAME}: Max children reached'
+              type: DEPENDENT
+              key: 'phpfpm.pool.max_children["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              description: 'The number of times that pm.max_children has been reached since the php-fpm pool started'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''max children reached'']'
+                - type: SIMPLE_CHANGE
+                  parameters:
+                    - ''
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: application
+                - tag: pool
+                  value: '{#NAME}'
+            - uuid: 92e809938da2413bb357760c6cee1ea2
+              name: 'PHP-FPM Pool {#NAME}: Pool name'
+              type: DEPENDENT
+              key: 'phpfpm.pool.name["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: CHAR
+              description: 'The name of current pool.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.pool
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 3h
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: application
+                - tag: pool
+                  value: '{#NAME}'
+            - uuid: a028888e152048f98a77b13c628bf4aa
+              name: 'PHP-FPM Pool {#NAME}: Processes, active'
+              type: DEPENDENT
+              key: 'phpfpm.pool.processes_active["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              description: 'The total number of active processes.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''active processes'']'
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: system
+                - tag: pool
+                  value: '{#NAME}'
+            - uuid: 5004063719214ef6a3de678300ae9bf1
+              name: 'PHP-FPM Pool {#NAME}: Processes, idle'
+              type: DEPENDENT
+              key: 'phpfpm.pool.processes_idle["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              description: 'The total number of idle processes.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''idle processes'']'
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: system
+                - tag: pool
+                  value: '{#NAME}'
+            - uuid: f47ca11b06bf446898aeab4ccef0dfd9
+              name: 'PHP-FPM Pool {#NAME}: Processes, max active'
+              type: DEPENDENT
+              key: 'phpfpm.pool.processes_max_active["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              description: 'The highest value that ''active processes'' has reached since the php-fpm server started.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''max active processes'']'
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: application
+                - tag: pool
+                  value: '{#NAME}'
+            - uuid: 09adf2a35b804b46a15845f11c446da2
+              name: 'PHP-FPM Pool {#NAME}: Processes, total'
+              type: DEPENDENT
+              key: 'phpfpm.pool.processes_total["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              description: 'The total number of server processes currently running.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''total processes'']'
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: system
+                - tag: pool
+                  value: '{#NAME}'
+            - uuid: 2093cab4a4d34eba88fa4ee0012b0f42
+              name: 'PHP-FPM Pool {#NAME}: Process manager'
+              type: DEPENDENT
+              key: 'phpfpm.pool.process_manager["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: CHAR
+              description: 'The method used by the process manager to control the number of child processes for this pool.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''process manager'']'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 3h
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: application
+                - tag: pool
+                  value: '{#NAME}'
+              trigger_prototypes:
+                - uuid: 7563195531e446aeacf226f188c0b4b4
+                  expression: 'last(/PHP-FPM to Multi Pool/phpfpm.pool.process_manager["{#NAME}"],#1)<>last(/PHP-FPM to Multi Pool/phpfpm.pool.process_manager["{#NAME}"],#2)'
+                  name: 'PHP-FPM Pool {#NAME}: Manager changed'
+                  event_name: 'PHP-FPM Pool {#NAME}: Manager changed (new value received: {ITEM.VALUE})'
+                  priority: INFO
+                  description: 'PHP-FPM manager changed. Ack to close.'
+                  manual_close: 'YES'
+                  tags:
+                    - tag: pool
+                      value: '{#NAME}'
+                    - tag: scope
+                      value: notice
+            - uuid: 7eebbe3071f142aab820c58c110c780f
+              name: 'PHP-FPM Pool {#NAME}: Slow requests'
+              type: DEPENDENT
+              key: 'phpfpm.pool.slow_requests["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              description: 'The number of requests that exceeded your request_slowlog_timeout value.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''slow requests'']'
+                - type: SIMPLE_CHANGE
+                  parameters:
+                    - ''
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: application
+                - tag: pool
+                  value: '{#NAME}'
+              trigger_prototypes:
+                - uuid: fbded0da71294ec2842f62dfa989de9f
+                  expression: 'min(/PHP-FPM to Multi Pool/phpfpm.pool.slow_requests["{#NAME}"],#3)>0'
+                  name: 'PHP-FPM Pool {#NAME}: Detected slow requests'
+                  priority: WARNING
+                  description: 'PHP-FPM detected slow request. A slow request means that it took more time to execute than expected (defined in the configuration of your pool).'
+                  tags:
+                    - tag: pool
+                      value: '{#NAME}'
+                    - tag: scope
+                      value: performance
+            - uuid: ea43cb2e9d734ea19ea180c8ce9e548b
+              name: 'PHP-FPM Pool {#NAME}: Start time'
+              type: DEPENDENT
+              key: 'phpfpm.pool.start_time["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              units: unixtime
+              description: 'The time when this pool was started.'
+              preprocessing:
+                - type: XMLPATH
+                  parameters:
+                    - '$.[''start time'']'
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: application
+                - tag: pool
+                  value: '{#NAME}'
+            - uuid: 56b68c2bf89445bda6c38db64166bdd9
+              name: 'PHP-FPM Pool {#NAME}: Uptime'
+              type: DEPENDENT
+              key: 'phpfpm.pool.uptime["{#NAME}"]'
+              delay: '0'
+              history: 7d
+              units: s
+              description: 'How long has this pool been running.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[''start since'']'
+              master_item:
+                key: 'phpfpm.pool_status["{#NAME}"]'
+              tags:
+                - tag: component
+                  value: application
+                - tag: pool
+                  value: '{#NAME}'
+              trigger_prototypes:
+                - uuid: 6386bf18e5ee4c41828c0b8853430342
+                  expression: 'nodata(/PHP-FPM to Multi Pool/phpfpm.pool.uptime["{#NAME}"],30m)=1'
+                  name: 'PHP-FPM Pool {#NAME}: Failed to fetch info data'
+                  event_name: 'PHP-FPM Pool {#NAME}: Failed to fetch info data (or no data for 30m)'
+                  priority: INFO
+                  description: 'Zabbix has not received data for items for the last 30 minutes'
+                  manual_close: 'YES'
+                  dependencies:
+                    - name: 'PHP-FPM: Process is not running'
+                      expression: 'last(/PHP-FPM to Multi Pool/proc.num["{$PHP_FPM.PROCESS_NAME}"])=0'
+                  tags:
+                    - tag: pool
+                      value: '{#NAME}'
+                    - tag: scope
+                      value: notice
+                - uuid: 0ca46ac4323f4b419e029ef7d3704dff
+                  expression: 'last(/PHP-FPM to Multi Pool/phpfpm.pool.uptime["{#NAME}"])<10m'
+                  name: 'PHP-FPM Pool {#NAME}: Pool has been restarted'
+                  priority: INFO
+                  description: 'Uptime is less than 10 minutes.'
+                  manual_close: 'YES'
+                  tags:
+                    - tag: pool
+                      value: '{#NAME}'
+                    - tag: scope
+                      value: notice
+            - uuid: 43c386dccaf7405cb6dc3016296c424c
+              name: 'PHP-FPM Pool {#NAME}: php-fpm_ping'
+              key: 'phpfpm.pool_ping["{#NAME}"]'
+              history: 7d
+              description: 'Return health information about a pool'
+              tags:
+                - tag: component
+                  value: health
+                - tag: pool
+                  value: '{#NAME}'
+              trigger_prototypes:
+                - uuid: aaabea6e74594c4b80c14738c8d595e0
+                  expression: 'last(/PHP-FPM to Multi Pool/phpfpm.pool_ping["{#NAME}"])=0 or nodata(/PHP-FPM to Multi Pool/phpfpm.pool_ping["{#NAME}"],3m)=1'
+                  name: 'PHP-FPM Pool {#NAME}: Service is down'
+                  priority: HIGH
+                  manual_close: 'YES'
+                  dependencies:
+                    - name: 'PHP-FPM: Process is not running'
+                      expression: 'last(/PHP-FPM to Multi Pool/proc.num["{$PHP_FPM.PROCESS_NAME}"])=0'
+                  tags:
+                    - tag: pool
+                      value: '{#NAME}'
+                    - tag: scope
+                      value: availability
+            - uuid: aa76686c681d4af6bf5e2d9108d05de7
+              name: 'PHP-FPM Pool {#NAME}: Get status'
+              key: 'phpfpm.pool_status["{#NAME}"]'
+              history: 7d
+              trends: '0'
+              value_type: CHAR
+              description: 'Return low-level information about a pool'
+              tags:
+                - tag: component
+                  value: raw
+                - tag: pool
+                  value: '{#NAME}'
+      tags:
+        - tag: class
+          value: application
+        - tag: target
+          value: php-fpm
+      macros:
+        - macro: '{$PHP_FPM.HOST}'
+          value: localhost
+          description: 'Hostname or IP of PHP-FPM status host or container.'
+        - macro: '{$PHP_FPM.LLD.FILTER.POOL.MATCHES}'
+          value: '.*'
+          description: 'Filter of discoverable pools'
+        - macro: '{$PHP_FPM.PING.PAGE}'
+          value: php-fpm_ping
+          description: 'The path of PHP-FPM ping page.'
+        - macro: '{$PHP_FPM.PING.REPLY}'
+          value: pong
+          description: 'Expected reply to the ping.'
+        - macro: '{$PHP_FPM.PORT}'
+          value: '80'
+          description: 'The port of PHP-FPM status host or container.'
+        - macro: '{$PHP_FPM.PROCESS_NAME}'
+          value: php-fpm
+          description: 'PHP-FPM process name'
+        - macro: '{$PHP_FPM.QUEUE.WARN.MAX}'
+          value: '80'
+          description: 'The maximum PHP-FPM queue usage percent for trigger expression.'
+        - macro: '{$PHP_FPM.STATUS.PAGE}'
+          value: php-fpm_status
+          description: 'The path of PHP-FPM status page.'
+      valuemaps:
+        - uuid: 270f7ffd28c24266b7b6ee0d8bb278db
+          name: 'Service state'
+          mappings:
+            - value: '0'
+              newvalue: Down
+            - value: '1'
+              newvalue: Up
+
